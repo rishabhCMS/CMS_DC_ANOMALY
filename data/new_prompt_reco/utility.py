@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import os
 from data.new_prompt_reco.setting import (EXTENDED_FEATURES, FEATURE_SET_NUMBER, FIX_FEATURE_COLUMNS,
-                                            FEATURES, PDs, 
+                                            FEATURES, PDs, CUTOFF_VALUE_EVENTS_LUMI,
                                             GOOD_DATA_DIRECTORY, PD_GOOD_DATA_DIRECTORY,
                                             FRAC_TEST, FRAC_VALID)
 
@@ -16,15 +16,18 @@ def get_full_features(selected_pd):
     for feature in FEATURES[selected_pd]: features.extend(["{}_{}".format(feature, i) for i in range(0,7)])
     return features
 
-def read_data(selected_pd, pd_data_directory):
-    return pd.read_csv(os.path.join(pd_data_directory, "{}_feature{}.csv".format(selected_pd, FEATURE_SET_NUMBER)))
+def read_data(selected_pd, pd_data_directory, cutoff_eventlumi=False):
+    read_df = pd.read_csv(os.path.join(pd_data_directory, "{}_feature{}.csv".format(selected_pd, FEATURE_SET_NUMBER)))
+    if cutoff_eventlumi:
+        read_df = read_df.query('EventsPerLs >= {}'.format(CUTOFF_VALUE_EVENTS_LUMI))
+    return read_df
 
 def extract_and_merge_to_csv(selected_pd, features, data_directory, pd_data_directory, failure=False):
     list_df = []
     if failure:
         for dat_numpy in os.listdir(os.path.join(data_directory, selected_pd)):
             write_df = pd.DataFrame()
-            np_dat = np.load(os.path.join(data_directory, selected_pd,  dat_numpy), encoding="latin1")
+            np_dat = np.load(os.path.join(data_directory, selected_pd,  dat_numpy), encoding="latin1", allow_pickle=True)
             read_df = pd.DataFrame(np_dat)
             for feature in features:
                 try:

@@ -1,7 +1,11 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
+
+from functools import reduce
 import pandas as pd
 import numpy as np
+
+
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import auc
 from math import sqrt, isnan
@@ -51,8 +55,8 @@ def plot_roc(
 
 def evalSmooth(
         channel = "JetHT",
-        path_dat='logs/minmaxscalar/2e15BS1800EP',
-        model_list=['Sparse', 'Variational', 'Contractive', 'Variational'],
+        path_dat='logs/minmaxscalar/2e16BS1200EP',
+        model_list =  ['Vanilla', 'Sparse', 'Contractive', 'Variational'], # ["SparseContractive", "SparseVariational", "ContractiveVariational", "Standard"],
         COLOR_PALETES=['r','g','b','o'],
         datafraction_list=[1.00 for i in range(10)],
         n_bins=40
@@ -60,7 +64,7 @@ def evalSmooth(
     model_roc_auc = {model: [] for model in model_list}
     for model in model_list:
         for index, data_frac in enumerate(datafraction_list):
-            read_df = pd.read_csv(os.path.join(path_dat, '{} model {} {} {}.txt'.format(model, channel, index+1, data_frac)), sep=" ", index_col=False)
+            read_df = pd.read_csv(os.path.join(path_dat, '{}_model_{}_f{}_{} {}.txt'.format(model, channel, FEATURE_SET_NUMBER, index+1, data_frac)), sep=" ", index_col=False)
             model_roc_auc[model].append(auc(read_df['fpr'], read_df['tpr']))
     model_roc_auc_mean = { key: np.sqrt(np.mean(np.square(roc_auc))) for key, roc_auc in model_roc_auc.items() }
     model_roc_auc_rms = { key: np.std(roc_auc) for key, roc_auc in model_roc_auc.items() }
@@ -71,7 +75,7 @@ def evalSmooth(
     y_rms_bins = {model:[] for model in model_list}
     for model in model_list:
         df_model = pd.concat([
-            pd.read_csv(os.path.join(path_dat, '{} model {} {} {}.txt'.format(model, channel, index+1, dat_frac)), sep=" ", index_col=False)
+            pd.read_csv(os.path.join(path_dat, '{}_model_{}_f{}_{} {}.txt'.format(model, channel, FEATURE_SET_NUMBER, index+1, data_frac)), sep=" ", index_col=False)
             for index, dat_frac in enumerate(datafraction_list)])
         for bin_i in range(n_bins):
             df_bin_i = df_model.query('fpr > {} & fpr < {}'.format(x_chunk[bin_i], x_chunk[bin_i+1]))
@@ -96,18 +100,19 @@ def evalSmooth(
         plt.legend(["{}, AUC {:.2f} $\pm$ {:.3f}".format(model, 100.0*model_roc_auc_mean[model], 100.0*model_roc_auc_rms[model]) for model in model_list], loc="upper left", frameon=False)
     plt.ylim(0.0, 1.01)
     # plt.show()
-    plt.savefig(os.path.join(path_dat, 'performance_{}.png').format(channel))
+    model_list_str = reduce(lambda x,y: x+y, model_list)
+    plt.savefig(os.path.join(path_dat, 'performance_{}_{}.png').format(channel, model_list_str))
 
 def plot_decision_val_dist(
-        path_dat='logs/minmaxscalar/2e15BS12000EP',
         channel = 'JetHT',
+        path_dat='logs/minmaxscalar/2e16BS1200EP',
         model_name = 'Vanilla',
         model_number = 1,
-        n_bins = 80, # 80
+        n_bins = 80, # 80 500
         base_log = 1.1
         ):
-    df_good = pd.read_csv(os.path.join(path_dat, 'good_totalSE_{}_{}_{}.txt'.format(model_name, channel, model_number)), sep=" ")
-    df_bad = pd.read_csv(os.path.join(path_dat, 'bad_totalSE_{}_{}_{}.txt'.format(model_name, channel, model_number)), sep=" ")
+    df_good = pd.read_csv(os.path.join(path_dat, 'good_totalSE_{}_{}_f{}_{}.txt'.format(model_name, channel, FEATURE_SET_NUMBER, model_number)), sep=" ")
+    df_bad = pd.read_csv(os.path.join(path_dat, 'bad_totalSE_{}_{}_f{}_{}.txt'.format(model_name, channel, FEATURE_SET_NUMBER, model_number)), sep=" ")
     
     good_channels = df_good['total_se']
     bad_channels = df_bad['total_se']
@@ -117,24 +122,35 @@ def plot_decision_val_dist(
     fig, ax = plt.subplots()
 
     # bins = se_min + ((se_max-se_min)/n_bins * np.arange(0, n_bins+1))
-    bins = base_log**(np.arange(2, n_bins))
-    plt.hist(good_channels, bins=bins, alpha=0.5, label='Labeled Good (Human)')
-    plt.hist(bad_channels,  bins=bins, alpha=0.5, label='Labeled Bad (Human)')
+    # bins = 0.05 * np.arange(1, n_bins)
+    bins = base_log**(np.arange(-10, n_bins))
+    plt.hist(good_channels, bins=bins, alpha=0.5, label='Labeled Good')
+    plt.hist(bad_channels,  bins=bins, alpha=0.5, label='Labeled Bad (Human and DCS)')
     plt.legend(loc='upper right')
     # plt.hist([good_channels, bad_channels], n_bins, histtype='step', stacked=True, fill=False)
     plt.title('Distribution of Decision Value ({}, {} datasets)'.format(model_name, channel))
     plt.xlabel("Total Square Error")
     plt.ylabel("#")
-    plt.yscale('log')
+    # plt.yscale('log')
     # plt.xlim((0, 80.0))
     plt.xscale('log')
-    plt.savefig('se_dist_{}{}_{}.png'.format(model_name, model_number, channel))
+    plt.savefig(os.path.join(path_dat, 'se_dist_{}{}f{}_{}_unlog.png'.format(model_name, model_number, FEATURE_SET_NUMBER, channel)))
     # plt.show()
 
+
+
 if __name__ == "__main__":
-    for channel in ["ZeroBias", "JetHT", "EGamma", "SingleMuon"]:
-        for model_name in ['Sparse', 'Variational', 'Contractive', 'Variational']:
-            main_loss(
-                channel = channel,
-                model_name = model_name,
-            )
+    # plot_decision_val_dist(
+    #     channel = 'SingleMuon',
+    #     model_name = 'Vanilla',
+    # )
+    # plot_decision_val_dist(
+    #     channel = 'JetHT',
+    #     model_name = 'Variational',
+    # )
+    # plot_decision_val_dist(
+    #     channel = 'ZeroBias',
+    #     model_name = 'Variational',
+    # )
+    for channel in ["ZeroBias", "JetHT", "SingleMuon"]:
+        evalSmooth(channel=channel, n_bins=50, datafraction_list=[1.00 for i in range(5)])
